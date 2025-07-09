@@ -1,3 +1,5 @@
+//go:generate fyne bundle -o assets.go assets/hyacinth/purple/hp_0001.png
+
 package main
 
 import (
