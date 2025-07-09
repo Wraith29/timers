@@ -1,8 +1,6 @@
 package main
 
-import (
-	"time"
-)
+import "time"
 
 type Timer struct {
 	duration, remaining time.Duration
@@ -19,16 +17,18 @@ func NewTimer(duration time.Duration) Timer {
 	}
 }
 
-func (t *Timer) OnTick(tickFn func() error) {
+func (t *Timer) Run(onTickFn, onCompleteFn func() error) {
 	for {
 		select {
 		case <-t.ticker.C:
 			t.remaining -= time.Second
-			if err := tickFn(); err != nil {
+			if err := onTickFn(); err != nil {
 				panic(err)
 			}
 		case <-t.timer.C:
-			return
+			if err := onCompleteFn(); err != nil {
+				panic(err)
+			}
 		}
 	}
 }

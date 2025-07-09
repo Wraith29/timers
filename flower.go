@@ -1,43 +1,83 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
+	"io/fs"
+	"os"
 	"path/filepath"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 )
 
 type Flower struct {
-	name   string
-	assets []*canvas.Image
-	stage  int
+	AssetPath  string `json:"asset_path"`
+	Name       string `json:"name"`
+	GrowthRate int    `json:"growth_rate"`
+
+	stages       []*canvas.Image `json:"-"`
+	currentStage int             `json:"-"`
 }
 
-func NewFlower(name string) Flower {
-	assets := make([]*canvas.Image, 5)
+func (f *Flower) LoadStages() {
+	f.stages = make([]*canvas.Image, 0)
+	f.currentStage = 0
 
-	for idx := 1; idx <= 5; idx++ {
-		img := canvas.NewImageFromFile(
-			filepath.Join("assets", name, fmt.Sprintf("%d.png", idx)),
-		)
+	err := filepath.WalkDir(f.AssetPath, func(path string, d fs.DirEntry, err error) error {
+		if filepath.Ext(path) != ".png" {
+			return nil
+		}
 
+		img := canvas.NewImageFromFile(path)
+		if img.Hidden {
+			panic("image should not be hidden")
+		}
 		img.ScaleMode = canvas.ImageScalePixels
 		img.SetMinSize(fyne.NewSize(144, 144))
-		assets[idx-1] = img
-	}
 
-	return Flower{
-		name:   name,
-		assets: assets,
-		stage:  1,
+		f.stages = append(f.stages, img)
+
+		return nil
+	})
+
+	if err != nil {
+		panic(err)
 	}
 }
 
-func (f *Flower) Grow() {
-	if f.stage < 5 {
-		f.stage++
-	} else {
-		f.stage = 1
+func LoadFlowers() ([]*Flower, error) {
+	bytes, err := os.ReadFile("flowers.json")
+	if err != nil {
+		return nil, err
 	}
+
+	var flowers []*Flower
+
+	if err := json.Unmarshal(bytes, &flowers); err != nil {
+		return nil, err
+	}
+
+	for _, flower := range flowers {
+		flower.LoadStages()
+	}
+
+	return flowers, nil
+}
+
+func (f *Flower) Update(img *canvas.Image) *time.Ticker {
+	ticker := time.NewTicker(time.Second * time.Duration(f.GrowthRate))
+
+	go func() {
+		for range ticker.C {
+			f.currentStage++
+			if f.currentStage >= len(f.stages) {
+				f.currentStage = 0
+			}
+
+			*img = *f.stages[f.currentStage]
+		}
+	}()
+
+	return ticker
 }
